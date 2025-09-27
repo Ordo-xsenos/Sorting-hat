@@ -1,4 +1,5 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, user
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, user, \
+    LinkPreviewOptions
 
 # Замени на ID твоего канала (должен начинаться с -100 для супергрупп/каналов)
 CHANNEL_ID = "@Shayxontohur_TIM"  # или -1001234567890
@@ -32,18 +33,9 @@ async def check_user_subscription(bot, user_id: int) -> bool:
         return False
 
 async def create_faculty_url(faculty: str) -> InlineKeyboardMarkup:
-    # Большое превью
-    # Для использования prefer_large_media обязательно указывать ещё и url
-    options_3 = LinkPreviewOptions(
-        url="https://nplus1.ru/news/2024/05/23/voyager-1-science-data",
-        prefer_large_media=True
-    )
-    await message.answer(
-        f"Большое превью\n{links_text}",
-        link_preview_options=options_3
-    )
-    url = f"https://t.me/joinchat/{faculty}"  # Замените на реальную ссылку для каждого факультета
+    faculty_list = {'Gryffindor':'https://t.me/+YbYXza1MRCViNmVi', 'Hufflepuff':'https://t.me/+RX3X_EnrGdY5ZWVi', 'Ravenclaw':'https://t.me/+vKbkfxNmTTdkMzgy', 'Slytherin':'https://t.me/+RT6x82IdsPFhMGYy'}
+    url = faculty_list[faculty]  # Замените на реальную ссылку для каждого факультета
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Join {faculty}", url=url)]
+        [InlineKeyboardButton(text=f"Join {faculty_list[faculty]}", url=url)]
     ])
     return keyboard
