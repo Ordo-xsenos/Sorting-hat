@@ -1,11 +1,13 @@
 from aiogram import Router, F
+from aiogram import flags
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, LinkPreviewOptions
+from aiogram.types import Message, CallbackQuery
 from keyboards.user_keyboards import create_subscription_keyboard, check_user_subscription
 from keyboards.user_keyboards import main,create_faculty_url,create_subscription_keyboard
 from create_bot import bot
 from dotenv import load_dotenv
 import asyncio
+import random
 
 load_dotenv()
 
@@ -140,29 +142,46 @@ async def support_menu(message: Message):
 
 
 @start_router.message(F.text == '📝 Fakultetga qoshilish')
+@flags.chat_action('typing')
 async def get_faculty(message: Message, **data):
-    await message.delete()
     msg = await message.answer('*Thinking...*', parse_mode='Markdown')
-    await asyncio.sleep(1)
-    await msg.edit_text('Hmm....')
-    await asyncio.sleep(1)
-    await msg.edit_text('....')
-    await asyncio.sleep(1)
-    await msg.edit_text('.....')
-    await asyncio.sleep(1)
-    await msg.edit_text('Qiziq..')
-    await asyncio.sleep(1)
-    await msg.edit_text('Albatta!!')
-    await msg.delete()
+
+    # Имитация печати через ChatAction.typing + точки как у людей с рандомной задержкой
+    texts = [
+        "*Hmm.*",
+        "*Hmm..*",
+        "*Hmm...*",
+        "*....*",
+        "*.....*",
+        "*Qiziq..*",
+        "*Albatta!!*"
+    ]
+
+    for t in texts:
+        try:
+            await message.bot.send_chat_action(message.chat.id, action='typing')
+            await asyncio.sleep(random.uniform(0.8, 1.5))
+            await msg.edit_text(t, parse_mode='Markdown')
+        except Exception as e:
+            print(f"Ошибка редактирования: {e}")
+            break
+
     db = data["db"]
     user = await db.get_user(message.from_user.id)
+
     if not user:
         await start_handler(message, db)
         user = await db.get_user(message.from_user.id)
+
     if user:
-        await message.answer(f'Siz "{user.get("faculty", "Tayinlanmagan")}" fakultet talabasisiz.. ', reply_markup=main)
+        await message.answer(
+            f'*📚 Siz* "*{user.get("faculty", "Tayinlanmagan")}*" *fakultet talabasisiz..* ',
+            reply_markup=main,
+            parse_mode='Markdown'
+        )
     else:
-        await message.answer("Foydalanuvchi ma'lumotlar bazasida topilmadi.")
+        await message.answer("*❌ Foydalanuvchi ma'lumotlar bazasida topilmadi.*", parse_mode='Markdown')
+
     # Защита: если faculty отсутствует или равен None, присваиваем и обновляем
     if user and ("faculty" not in user or user["faculty"] is None):
         faculty = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
@@ -177,6 +196,7 @@ async def get_faculty(message: Message, **data):
             language_code=message.from_user.language_code,
             faculty=faculty_value
         )
+
 
 @start_router.message(F.text == '📊 Reyting')
 async def get_rating(message: Message, **data):
