@@ -23,9 +23,9 @@ class PostgresHandler:
         """Создание пула соединений с базой данных"""
         try:
             if self.dsn:
-                self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=min_size, max_size=max_size)
+                self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=min_size, max_size=max_size, statement_cache_size=0)
             else:
-                self.pool = await asyncpg.create_pool(host=self.host, port=self.port, user=self.user, password=self.password, database=self.database, min_size=min_size, max_size=max_size)
+                self.pool = await asyncpg.create_pool(host=self.host, port=self.port, user=self.user, password=self.password, database=self.database, min_size=min_size, max_size=max_size, statement_cache_size=0)
             logger.info("Пул соединений успешно создан")
         except Exception as e:
             logger.error(f"Ошибка создания пула соединений: {e}")
