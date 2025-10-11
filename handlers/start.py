@@ -144,6 +144,7 @@ async def support_menu(message: Message):
 @start_router.message(F.text == '📝 Fakultetga qoshilish')
 @flags.chat_action('typing')
 async def get_faculty(message: Message, **data):
+    await message.delete()
     msg = await message.answer('*Thinking...*', parse_mode='Markdown')
 
     # Имитация печати через ChatAction.typing + точки как у людей с рандомной задержкой
@@ -221,22 +222,25 @@ Lekin tez orada bu bo‘limda fakultetlarning umumiy ballari, yetakchilar va mus
 @start_router.message(F.text == 'ℹ️ Loyiha haqida')
 async def get_info(message: Message):
     await message.delete()
-    await message.answer("""ℹ️ Loyiha haqida  
+    await message.answer(
+        """<b>ℹ️ Loyiha haqida</b>
 
-🏫 Ushbu loyiha Shayxontohur TIM maktabi o‘quvchilari orasida do‘stlik, sog‘lom raqobat va jamoaviylikni rivojlantirish maqsadida PSU (Presidential Student Union , @Shayxontohur_TIM) jamoasi tomonidan tashkil etilgan.  
+🏫 Ushbu loyiha Shayxontohur TIM maktabi o'quvchilari orasida <b>do'stlik</b>, <b>sog'lom raqobat</b> va <b>jamoaviylikni rivojlantirish</b> maqsadida PSU (Presidential Student Union, @Shayxontohur_TIM) jamoasi tomonidan tashkil etilgan.
 
-🔮 Garri Potter’dagi Hogwarts an’analari asosida o‘quvchilar 4 fakultetga ajratiladi:  
-🦁 Gryffindor – jasorat va qat’iyat  
-🐍 Slytherin – makr va yetakchilik  
-🦅 Ravenclaw – bilim va donolik  
-🦡 Hufflepuff – mehnatsevarlik va sadoqat  
+🔮 <b>Garri Potter'dagi Hogwarts an'analari asosida o'quvchilar 4 fakultetga ajratiladi:</b>
+🦁 Gryffindor – <i>jasorat va qat'iyat</i>
+🐍 Slytherin – <i>makr va yetakchilik</i>
+🦅 Ravenclaw – <i>bilim va donolik</i>
+🦡 Hufflepuff – <i>mehnatsevarlik va sadoqat</i>
 
-🎯 Loyihaning asosiy maqsadlari:  
-- O‘quvchilar o‘rtasida ijobiy raqobat yaratish  
-- Jamoaviy ishlashni kuchaytirish  
-- Bilim, salohiyat, volontyorlik, ijod va ijtimoiy sohalarda musobaqalar o‘tkazish  
-- Eng faol va muvaffaqiyatli fakultetni aniqlash  
+🎯 <b>Loyihaning asosiy maqsadlari:</b>
+- <i>O'quvchilar o'rtasida ijobiy raqobat yaratish</i>
+- <i>Jamoaviy ishlashni kuchaytirish</i>
+- <i>Bilim, salohiyat, volontyorlik, ijod va ijtimoiy sohalarda musobaqalar o'tkazish</i>
+- <i>Eng faol va muvaffaqiyatli fakultetni aniqlash</i>
 
-🏆 Fakultetlar turli tadbirlarda ball to‘plashadi va yil yakunida eng ko‘p ball yig‘gan fakultet Chempion deb e’lon qilinadi.  
+🏆 <b>Fakultetlar turli tadbirlarda ball to'plashadi va yil yakunida eng ko'p ball yig'gan fakultet Chempion deb e'lon qilinadi.</b>
 
-✨ Bu loyiha — o‘quvchilarning qiziqishini oshirish, liderlik va do‘stlikni mustahkamlash uchun yaratilgan maxsus dasturdir.""")
+✨ <b>Bu loyiha</b> — <i>o'quvchilarning qiziqishini oshirish, liderlik va do'stlikni mustahkamlash uchun yaratilgan maxsus dasturdir.</i>""",
+        parse_mode='HTML'
+    )
