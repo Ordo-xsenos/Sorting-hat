@@ -8,26 +8,30 @@ from create_bot import bot
 from dotenv import load_dotenv
 import asyncio
 import random
+import logging
+from html import escape as html_escape
 
 load_dotenv()
 
 start_router = Router()
 
-async def start_handler(message: Message, db):
-    user = message.from_user
-    await db.add_user(
-        user_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        language_code=user.language_code,
-        faculty=None
-    )
-    await db.add_message(
-        user_id=user.id,
-        message_id=message.message_id,
-        text=message.text
-    )
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(ch)
+
+async def handle_register(message: Message, db_handler):
+    # Допустим, вы получаете данные пользователя из message.from_user
+    u = message.from_user
+    # Добавляем пользователя с 'умным' выбором факультета (db_handler.add_user сама выберет faculty, если None)
+    ok = await db_handler.add_user(u.id, username=u.username, first_name=u.first_name, last_name=u.last_name, is_bot=u.is_bot, language_code=getattr(u, 'language_code', None))
+    if ok:
+        await message.answer('Регистрация завершена.')
+    else:
+        await message.answer('Ошибка при регистрации. Попробуйте позже.')
+
 
 # Команда /start - отправляем сообщение с предложением подписаться
 @start_router.message(Command("start"))
@@ -168,15 +172,18 @@ async def get_faculty(message: Message, **data):
     user = await db.get_user(message.from_user.id)
 
     if not user:
-        await start_handler(message, db)
+        await handle_register(message, db)
         user = await db.get_user(message.from_user.id)
 
+    faculty_val = user.get('faculty') or 'Неизвестно'
+    # Экранируем значение факультета перед отправкой в HTML parse_mode
+    faculty_safe = html_escape(str(faculty_val))
+
     if user:
-        await message.answer(
-            f'*📚 Siz* "*{user.get("faculty", "Tayinlanmagan")}" *fakultet talabasisiz..* ',
-            reply_markup=main,
-            parse_mode='Markdown'
-        )
+        try:
+            await message.answer(f'📚 Вы из факультета "<b>{faculty_safe}</b>"', parse_mode='HTML')
+        except Exception as e:
+            logger.exception(f"Error sending faculty message: {e}")
     else:
         await message.answer("*❌ Foydalanuvchi ma'lumotlar bazasida topilmadi.*", parse_mode='Markdown')
 
