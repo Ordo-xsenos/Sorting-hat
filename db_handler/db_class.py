@@ -4,9 +4,14 @@ import logging
 import random
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(ch)
 
+DEFAULT_FACULTIES = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
 
 class PostgresHandler:
     """Класс для работы с PostgreSQL базой данных через asyncpg"""
@@ -140,44 +145,114 @@ class PostgresHandler:
             raise
 
     # Методы для работы с пользователями
-    async def add_user(self, user_id: int, username: str = None,
-                       first_name: str = None, last_name: str = None,
-                       is_bot: bool = False, language_code: str = None,
-                       faculty: str = None, rating: int = 1) -> bool:
-        """Добавление нового пользователя с rating и faculty (умное распределение)"""
-        if rating <= 0:
-            logger.error(f"Рейтинг должен быть положительным: {rating}")
-            return False
-        # Если faculty не передан, определяем его автоматически
-        if faculty is None:
-            faculty_list = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
-            counts = await self.get_faculty_counts()
-            min_count = min(counts.values())
-            min_faculties = [f for f, c in counts.items() if c == min_count]
-            if len(min_faculties) == 4:
-                # Все факультеты равны — выбираем случайно
-                faculty = random.choice(faculty_list)
-            else:
-                # Выбираем факультет с минимальным количеством
-                faculty = random.choice(min_faculties)
+    async def get_faculty_counts(self) -> Dict[str, int]:
+        """Возвращает словарь {faculty_name: count} для всех факультетов.
+        Если в базе нет факультета из DEFAULT_FACULTIES — возвращаем 0 для него."""
         query = """
-                INSERT INTO users (user_id, username, first_name, last_name, is_bot, language_code, faculty, rating)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (user_id) DO \
-                UPDATE SET
-                    username = EXCLUDED.username, \
-                    first_name = EXCLUDED.first_name, \
-                    last_name = EXCLUDED.last_name, \
-                    rating = EXCLUDED.rating, \
-                    updated_at = CURRENT_TIMESTAMP, \
-                    faculty = EXCLUDED.faculty \
+                SELECT faculty, COUNT(*)::int AS cnt
+                FROM users
+                WHERE faculty IS NOT NULL
+                GROUP BY faculty; \
                 """
+        counts = {f: 0 for f in DEFAULT_FACULTIES}
         try:
             async with self.pool.acquire() as conn:
-                await conn.execute(query, user_id, username, first_name,
-                                   last_name, is_bot, language_code, faculty, rating)
-                return True
+                rows = await conn.fetch(query)
+                for r in rows:
+                    name = r['faculty']
+                    cnt = r['cnt']
+                    if name not in counts:
+                        # если в БД есть неожиданный факультет — добавим его в словарь
+                        counts[name] = cnt
+                    else:
+                        counts[name] = cnt
+            logger.info(f"Faculty counts: {counts}")
+            return counts
         except Exception as e:
-            logger.error(f"Ошибка добавления пользователя {user_id}: {e}")
+            logger.exception(f"Error while getting faculty counts: {e}")
+            # в случае ошибки — вернуть равномерные нули, чтобы система всё равно работала
+            return {f: 0 for f in DEFAULT_FACULTIES}
+
+    async def assign_faculty(self, conn: asyncpg.Connection) -> str:
+        """Выбирает факультет с минимальным количеством участников.
+        Защищено от гонок с помощью pg_advisory_xact_lock — поэтому вызывайте внутри транзакции.
+
+        Возвращает имя выбранного факультета (str).
+        """
+        # Задаём фиксированный ключ advisory lock'а (bigint). Можно выбрать любое число.
+        advisory_key = 1234567890123456789
+        # Заблокируем на уровне транзакции (работает только в рамках текущей транзакции)
+        await conn.execute('SELECT pg_advisory_xact_lock($1);', advisory_key)
+
+        # Получаем актуальные счётчики прямо из БД (внутри блокировки/транзакции)
+        q = """
+            SELECT faculty, COUNT(*)::int AS cnt
+            FROM users
+            WHERE faculty IS NOT NULL
+            GROUP BY faculty; \
+            """
+        rows = await conn.fetch(q)
+        counts = {f: 0 for f in DEFAULT_FACULTIES}
+        for r in rows:
+            counts[r['faculty']] = r['cnt']
+
+        logger.info(f"assign_faculty — counts inside tx: {counts}")
+        min_count = min(counts.values())
+        min_faculties = [f for f, c in counts.items() if c == min_count]
+
+        # если все равны — выбираем случайно по полному списку
+        if len(min_faculties) == len(DEFAULT_FACULTIES):
+            chosen = random.choice(DEFAULT_FACULTIES)
+        else:
+            chosen = random.choice(min_faculties)
+
+        logger.info(f"assign_faculty -> chosen: {chosen} (min_candidates={min_faculties}, min_count={min_count})")
+        return chosen
+
+    async def add_user(self,
+                       user_id: int,
+                       username: Optional[str] = None,
+                       first_name: Optional[str] = None,
+                       last_name: Optional[str] = None,
+                       is_bot: bool = False,
+                       language_code: Optional[str] = None,
+                       faculty: Optional[str] = None,
+                       rating: int = 1) -> bool:
+        """Добавляет пользователя или обновляет его. Если faculty не указан — выберет автоматически.
+
+        Защита от гонок реализована: мы начинаем транзакцию и внутри вызываем assign_faculty,
+
+        затем вставляем/обновляем запись.
+        """
+        if rating <= 0:
+            rating = 1
+
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.transaction():
+                    if faculty is None:
+                        # выбрать факультет безопасно внутри транзакции
+                        faculty = await self.assign_faculty(conn)
+
+                    # Используем UPSERT (ON CONFLICT) для атомарного вставки/обновления
+                    insert_q = """
+                               INSERT INTO users (user_id, username, first_name, last_name, is_bot, language_code, faculty, rating, created_at, updated_at)
+                               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                               ON CONFLICT (user_id) DO UPDATE SET
+                               username = EXCLUDED.username,
+                               first_name = EXCLUDED.first_name,
+                               last_name = EXCLUDED.last_name,
+                               is_bot = EXCLUDED.is_bot,
+                               language_code = EXCLUDED.language_code,
+                               faculty = EXCLUDED.faculty,
+                               rating = EXCLUDED.rating,
+                               updated_at = CURRENT_TIMESTAMP; \
+                               """
+                    await conn.execute(insert_q, user_id, username, first_name, last_name, is_bot, language_code, faculty, rating)
+                    logger.info(f"User {user_id} added/updated with faculty={faculty}")
+            return True
+        except Exception as e:
+            logger.exception(f"Error while adding/updating user {user_id}: {e}")
             return False
 
     async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
@@ -362,22 +437,3 @@ class PostgresHandler:
         except Exception as e:
             logger.error(f"Ошибка получения статистики: {e}")
             return {"users": 0, "messages": 0, "active_states": 0}
-
-    async def get_faculty_counts(self) -> Dict[str, int]:
-        """Возвращает количество пользователей по каждому факультету"""
-        query = """
-            SELECT faculty, COUNT(*) as count
-            FROM users
-            WHERE faculty IS NOT NULL
-            GROUP BY faculty
-        """
-        result = {fac: 0 for fac in ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']}
-        try:
-            async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query)
-                for row in rows:
-                    result[row['faculty']] = row['count']
-        except Exception as e:
-            logger.error(f"Ошибка получения количества по факультетам: {e}")
-        return result
-
