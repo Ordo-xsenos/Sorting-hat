@@ -156,7 +156,6 @@ class PostgresHandler:
             min_faculties = [f for f, c in counts.items() if c == min_count]
             if len(min_faculties) == 4:
                 # Все факультеты равны — выбираем случайно
-                import random
                 faculty = random.choice(faculty_list)
             else:
                 # Выбираем факультет с минимальным количеством
