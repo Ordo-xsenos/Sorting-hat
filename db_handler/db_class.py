@@ -1,6 +1,7 @@
 import asyncpg
 from typing import Optional, List, Dict, Any
 import logging
+import random
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -143,11 +144,23 @@ class PostgresHandler:
                        first_name: str = None, last_name: str = None,
                        is_bot: bool = False, language_code: str = None,
                        faculty: str = None, rating: int = 1) -> bool:
-        """Добавление нового пользователя с rating и faculty"""
+        """Добавление нового пользователя с rating и faculty (умное распределение)"""
         if rating <= 0:
             logger.error(f"Рейтинг должен быть положительным: {rating}")
             return False
-        # faculty обязателен при первом добавлении
+        # Если faculty не передан, определяем его автоматически
+        if faculty is None:
+            faculty_list = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
+            counts = await self.get_faculty_counts()
+            min_count = min(counts.values())
+            min_faculties = [f for f, c in counts.items() if c == min_count]
+            if len(min_faculties) == 4:
+                # Все факультеты равны — выбираем случайно
+                import random
+                faculty = random.choice(faculty_list)
+            else:
+                # Выбираем факультет с минимальным количеством
+                faculty = random.choice(min_faculties)
         query = """
                 INSERT INTO users (user_id, username, first_name, last_name, is_bot, language_code, faculty, rating)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (user_id) DO \
@@ -350,3 +363,22 @@ class PostgresHandler:
         except Exception as e:
             logger.error(f"Ошибка получения статистики: {e}")
             return {"users": 0, "messages": 0, "active_states": 0}
+
+    async def get_faculty_counts(self) -> Dict[str, int]:
+        """Возвращает количество пользователей по каждому факультету"""
+        query = """
+            SELECT faculty, COUNT(*) as count
+            FROM users
+            WHERE faculty IS NOT NULL
+            GROUP BY faculty
+        """
+        result = {fac: 0 for fac in ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']}
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(query)
+                for row in rows:
+                    result[row['faculty']] = row['count']
+        except Exception as e:
+            logger.error(f"Ошибка получения количества по факультетам: {e}")
+        return result
+

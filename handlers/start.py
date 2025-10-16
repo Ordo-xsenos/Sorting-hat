@@ -15,15 +15,13 @@ start_router = Router()
 
 async def start_handler(message: Message, db):
     user = message.from_user
-    faculty = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
-    faculty_value = faculty[int(random.randint(0, 100)) % 4]
     await db.add_user(
         user_id=user.id,
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
         language_code=user.language_code,
-        faculty=faculty_value
+        faculty=None
     )
     await db.add_message(
         user_id=user.id,
@@ -175,7 +173,7 @@ async def get_faculty(message: Message, **data):
 
     if user:
         await message.answer(
-            f'*📚 Siz* "*{user.get("faculty", "Tayinlanmagan")}*" *fakultet talabasisiz..* ',
+            f'*📚 Siz* "*{user.get("faculty", "Tayinlanmagan")}" *fakultet talabasisiz..* ',
             reply_markup=main,
             parse_mode='Markdown'
         )
@@ -184,8 +182,6 @@ async def get_faculty(message: Message, **data):
 
     # Защита: если faculty отсутствует или равен None, присваиваем и обновляем
     if user and ("faculty" not in user or user["faculty"] is None):
-        faculty = ['Gryffindor', 'Hufflepuff', 'Ravenclaw', 'Slytherin']
-        faculty_value = faculty[int(random.randint(0, 100)) % 4]
         await db.add_user(
             user_id=message.from_user.id,
             username=message.from_user.username,
@@ -193,7 +189,7 @@ async def get_faculty(message: Message, **data):
             last_name=message.from_user.last_name,
             is_bot=message.from_user.is_bot,
             language_code=message.from_user.language_code,
-            faculty=faculty_value
+            faculty=None
         )
 
 
