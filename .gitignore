@@ -68,6 +68,3 @@ local_settings.py
 
 # Ignore build artifacts for Cython
 cython_debug/
-
-# Ignore pyproject.toml if you don't want to commit it
-pyproject.toml
