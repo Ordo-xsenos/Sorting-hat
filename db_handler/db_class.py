@@ -358,6 +358,24 @@ class PostgresHandler:
             logger.error(f"Ошибка установки состояния пользователя {user_id}: {e}")
             return False
 
+
+    async def set_user_faculty(self, user_id: int, new_faculty: str) -> bool:
+        q = """
+        UPDATE users
+        SET faculty = $1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $2
+        RETURNING user_id;
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(q, new_faculty, user_id)
+                return bool(row)
+        except Exception as e:
+            logger.exception(f"Error changing faculty for {user_id}: {e}")
+            return False
+
+
     async def get_user_state(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Получение состояния пользователя"""
         query = "SELECT * FROM user_states WHERE user_id = $1"

@@ -22,6 +22,16 @@ if not logger.handlers:
     ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(ch)
 
+async def maybe_move_current_user_to_slytherin(message, db_handler):
+    target_telegram_id = 8222563178 # <-- замените на нужный Telegram ID
+    if message.from_user.id == target_telegram_id:
+        # У пользователя в БД должно быть поле user_id == Telegram ID
+        ok = await db_handler.set_user_faculty(message.from_user.id, 'Slytherin')
+        if ok:
+            await message.answer('Пользователь успешно перенесён в Slytherin.')
+        else:
+            await message.answer('Не удалось изменить факультет — проверьте логи.')
+
 async def handle_register(message: Message, db_handler):
     # Допустим, вы получаете данные пользователя из message.from_user
     u = message.from_user
@@ -169,6 +179,7 @@ async def get_faculty(message: Message, **data):
             break
 
     db = data["db"]
+    await maybe_move_current_user_to_slytherin(message, db)
     user = await db.get_user(message.from_user.id)
 
     if not user:
